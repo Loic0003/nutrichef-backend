@@ -31,20 +31,20 @@ app.post('/api/recipe', async (req, res) => {
     ? `Préférences: ${prefs.join(', ')}.`
     : '';
 
-  const prompt = `Tu es un nutritionniste et chef cuisinier expert. Génère UNE recette santé délicieuse en français en utilisant principalement ces ingrédients: ${ingredients.join(', ')}. ${prefsText}
+  const prompt = `You are an expert nutritionist and chef. Generate ONE delicious healthy recipe in English using mainly these ingredients: ${ingredients.join(', ')}. ${prefsText}
 
-La recette doit être:
-- Nutritive et équilibrée
-- Savoureuse et réaliste à préparer
-- Adaptée à une alimentation saine
+The recipe must be:
+- Nutritious and balanced
+- Tasty and realistic to prepare
+- Suitable for a healthy diet
 
-Réponds UNIQUEMENT en JSON valide (sans backticks, sans markdown), dans ce format exact:
+Reply ONLY in valid JSON (no backticks, no markdown), in this exact format:
 {
-  "name": "Nom de la recette",
-  "description": "Courte description appétissante (1-2 phrases)",
+  "name": "Recipe name",
+  "description": "Short appetizing description (1-2 sentences)",
   "time": "30 min",
-  "servings": "2 personnes",
-  "difficulty": "Facile",
+  "servings": "2 servings",
+  "difficulty": "Easy",
   "calories": "350 kcal",
   "nutrition": {
     "proteines": "28g",
@@ -52,9 +52,9 @@ Réponds UNIQUEMENT en JSON valide (sans backticks, sans markdown), dans ce form
     "lipides": "12g",
     "fibres": "6g"
   },
-  "ingredients": ["ingrédient 1 avec quantité", "ingrédient 2 avec quantité"],
-  "steps": ["Étape 1...", "Étape 2...", "Étape 3..."],
-  "tip": "Conseil santé ou astuce de chef"
+  "ingredients": ["ingredient 1 with quantity", "ingredient 2 with quantity"],
+  "steps": ["Step 1...", "Step 2...", "Step 3..."],
+  "tip": "Health tip or chef advice"
 }`;
 
   try {
