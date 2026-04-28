@@ -4,14 +4,27 @@ const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(cors());
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+app.options('*', cors());
 app.use(express.json());
 
 app.post('/api/recipe', async (req, res) => {
   const { ingredients, prefs } = req.body;
 
+  console.log('Requête reçue - ingrédients:', ingredients, 'prefs:', prefs);
+
   if (!ingredients || ingredients.length === 0) {
     return res.status(400).json({ error: 'Aucun ingrédient fourni.' });
+  }
+
+  if (!process.env.ANTHROPIC_API_KEY) {
+    console.error('ANTHROPIC_API_KEY manquante !');
+    return res.status(500).json({ error: 'Clé API manquante côté serveur.' });
   }
 
   const prefsText = prefs && prefs.length > 0
@@ -45,6 +58,7 @@ Réponds UNIQUEMENT en JSON valide (sans backticks, sans markdown), dans ce form
 }`;
 
   try {
+    console.log('Appel API Anthropic...');
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -60,13 +74,15 @@ Réponds UNIQUEMENT en JSON valide (sans backticks, sans markdown), dans ce form
     });
 
     const data = await response.json();
+    console.log('Réponse Anthropic status:', response.status);
 
     if (!response.ok) {
-      console.error('Anthropic error:', data);
-      return res.status(500).json({ error: 'Erreur API Anthropic.' });
+      console.error('Anthropic error:', JSON.stringify(data));
+      return res.status(500).json({ error: 'Erreur API Anthropic: ' + (data.error?.message || 'inconnue') });
     }
 
     const text = data.content?.map(b => b.text || '').join('').trim();
+    console.log('Texte reçu:', text.substring(0, 100));
 
     let recipe;
     try {
@@ -77,18 +93,20 @@ Réponds UNIQUEMENT en JSON valide (sans backticks, sans markdown), dans ce form
       else throw new Error('Format JSON invalide');
     }
 
+    console.log('Recette générée:', recipe.name);
     res.json(recipe);
 
   } catch (err) {
-    console.error('Erreur serveur:', err);
-    res.status(500).json({ error: 'Erreur interne du serveur.' });
+    console.error('Erreur serveur:', err.message);
+    res.status(500).json({ error: 'Erreur interne: ' + err.message });
   }
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'NutriChef API en ligne ✅' });
+  res.json({ status: 'NutriChef API en ligne ✅', apiKey: !!process.env.ANTHROPIC_API_KEY });
 });
 
 app.listen(PORT, () => {
   console.log(`NutriChef backend démarré sur le port ${PORT}`);
+  console.log(`Clé API présente: ${!!process.env.ANTHROPIC_API_KEY}`);
 });
