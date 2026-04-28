@@ -22,8 +22,8 @@ app.post('/api/recipe', async (req, res) => {
     return res.status(400).json({ error: 'Aucun ingrédient fourni.' });
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.error('ANTHROPIC_API_KEY manquante !');
+  if (!process.env.GROQ_API_KEY) {
+    console.error('GROQ_API_KEY manquante !');
     return res.status(500).json({ error: 'Clé API manquante côté serveur.' });
   }
 
@@ -58,30 +58,29 @@ Réponds UNIQUEMENT en JSON valide (sans backticks, sans markdown), dans ce form
 }`;
 
   try {
-    console.log('Appel API Anthropic...');
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    console.log('Appel API Groq...');
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01'
+        'Authorization': `Bearer ${process.env.GROQ_API_KEY}`
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'llama-3.3-70b-versatile',
         max_tokens: 1000,
         messages: [{ role: 'user', content: prompt }]
       })
     });
 
     const data = await response.json();
-    console.log('Réponse Anthropic status:', response.status);
+    console.log('Réponse Groq status:', response.status);
 
     if (!response.ok) {
-      console.error('Anthropic error:', JSON.stringify(data));
-      return res.status(500).json({ error: 'Erreur API Anthropic: ' + (data.error?.message || 'inconnue') });
+      console.error('Groq error:', JSON.stringify(data));
+      return res.status(500).json({ error: 'Erreur API Groq: ' + (data.error?.message || 'inconnue') });
     }
 
-    const text = data.content?.map(b => b.text || '').join('').trim();
+    const text = data.choices?.[0]?.message?.content?.trim() || '';
     console.log('Texte reçu:', text.substring(0, 100));
 
     let recipe;
@@ -103,10 +102,10 @@ Réponds UNIQUEMENT en JSON valide (sans backticks, sans markdown), dans ce form
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'NutriChef API en ligne ✅', apiKey: !!process.env.ANTHROPIC_API_KEY });
+  res.json({ status: 'NutriChef API en ligne ✅', apiKey: !!process.env.GROQ_API_KEY });
 });
 
 app.listen(PORT, () => {
   console.log(`NutriChef backend démarré sur le port ${PORT}`);
-  console.log(`Clé API présente: ${!!process.env.ANTHROPIC_API_KEY}`);
+  console.log(`Clé API présente: ${!!process.env.GROQ_API_KEY}`);
 });
