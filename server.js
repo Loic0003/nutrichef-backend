@@ -28,20 +28,22 @@ app.post('/api/recipe', async (req, res) => {
   }
 
   const prefsText = prefs && prefs.length > 0
-    ? `Préférences: ${prefs.join(', ')}.`
+    ? `Dietary preferences: ${prefs.join(', ')}.`
     : '';
 
-  const prompt = `You are an expert nutritionist and chef. Generate ONE delicious healthy recipe in English using mainly these ingredients: ${ingredients.join(', ')}. ${prefsText}
+  const prompt = `You are an expert nutritionist and chef. The user provided ingredients in any language. Generate ONE delicious healthy recipe using mainly these ingredients: ${ingredients.join(', ')}. ${prefsText}
+
+IMPORTANT: Detect the language of the ingredients and respond in that SAME language. If ingredients are in French, respond entirely in French. If in English, respond in English. If mixed, use the dominant language.
 
 The recipe must be:
 - Nutritious and balanced
 - Tasty and realistic to prepare
 - Suitable for a healthy diet
 
-Reply ONLY in valid JSON (no backticks, no markdown), in this exact format:
+Reply ONLY in valid JSON (no backticks, no markdown), in this exact format (translate ALL field values to the detected language, but keep the JSON keys exactly as shown):
 {
-  "name": "Recipe name",
-  "description": "Short appetizing description (1-2 sentences)",
+  "name": "Recipe name in detected language",
+  "description": "Short appetizing description (1-2 sentences) in detected language",
   "time": "30 min",
   "servings": "2 servings",
   "difficulty": "Easy",
@@ -52,9 +54,9 @@ Reply ONLY in valid JSON (no backticks, no markdown), in this exact format:
     "lipides": "12g",
     "fibres": "6g"
   },
-  "ingredients": ["ingredient 1 with quantity", "ingredient 2 with quantity"],
-  "steps": ["Step 1...", "Step 2...", "Step 3..."],
-  "tip": "Health tip or chef advice"
+  "ingredients": ["ingredient 1 with quantity in detected language", "ingredient 2 with quantity"],
+  "steps": ["Step 1 in detected language...", "Step 2...", "Step 3..."],
+  "tip": "Health tip or chef advice in detected language"
 }`;
 
   try {
