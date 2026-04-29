@@ -14,36 +14,35 @@ app.options('*', cors());
 app.use(express.json());
 
 app.post('/api/recipe', async (req, res) => {
-  const { ingredients, prefs } = req.body;
+  const { ingredients, prefs, language } = req.body;
 
-  console.log('Requête reçue - ingrédients:', ingredients, 'prefs:', prefs);
+  console.log('Requête reçue - ingrédients:', ingredients, 'prefs:', prefs, 'langue:', language);
 
   if (!ingredients || ingredients.length === 0) {
-    return res.status(400).json({ error: 'Aucun ingrédient fourni.' });
+    return res.status(400).json({ error: 'No ingredients provided.' });
   }
 
   if (!process.env.GROQ_API_KEY) {
     console.error('GROQ_API_KEY manquante !');
-    return res.status(500).json({ error: 'Clé API manquante côté serveur.' });
+    return res.status(500).json({ error: 'API key missing.' });
   }
 
-  const prefsText = prefs && prefs.length > 0
-    ? `Dietary preferences: ${prefs.join(', ')}.`
-    : '';
+  const prefsText = prefs && prefs.length > 0 ? `Dietary preferences: ${prefs.join(', ')}.` : '';
+  const lang = language || 'English';
 
-  const prompt = `You are an expert nutritionist and chef. The user provided ingredients in any language. Generate ONE delicious healthy recipe using mainly these ingredients: ${ingredients.join(', ')}. ${prefsText}
+  const prompt = `You are an expert nutritionist and chef. Generate ONE delicious healthy recipe using mainly these ingredients: ${ingredients.join(', ')}. ${prefsText}
 
-IMPORTANT: Detect the language of the ingredients and respond in that SAME language. If ingredients are in French, respond entirely in French. If in English, respond in English. If mixed, use the dominant language.
+IMPORTANT: Respond ENTIRELY in ${lang}. Every single word in the recipe (name, description, ingredients, steps, tip) must be in ${lang}.
 
 The recipe must be:
 - Nutritious and balanced
 - Tasty and realistic to prepare
 - Suitable for a healthy diet
 
-Reply ONLY in valid JSON (no backticks, no markdown), in this exact format (translate ALL field values to the detected language, but keep the JSON keys exactly as shown):
+Reply ONLY in valid JSON (no backticks, no markdown), in this exact format:
 {
-  "name": "Recipe name in detected language",
-  "description": "Short appetizing description (1-2 sentences) in detected language",
+  "name": "Recipe name in ${lang}",
+  "description": "Short appetizing description in ${lang}",
   "time": "30 min",
   "servings": "2 servings",
   "difficulty": "Easy",
@@ -54,9 +53,9 @@ Reply ONLY in valid JSON (no backticks, no markdown), in this exact format (tran
     "lipides": "12g",
     "fibres": "6g"
   },
-  "ingredients": ["ingredient 1 with quantity in detected language", "ingredient 2 with quantity"],
-  "steps": ["Step 1 in detected language...", "Step 2...", "Step 3..."],
-  "tip": "Health tip or chef advice in detected language"
+  "ingredients": ["ingredient with quantity in ${lang}"],
+  "steps": ["Step in ${lang}"],
+  "tip": "Health tip in ${lang}"
 }`;
 
   try {
