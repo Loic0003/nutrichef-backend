@@ -72,5 +72,48 @@ Reply ONLY in valid JSON (no backticks, no markdown):
   }
 });
 
+app.post('/api/chat', async (req, res) => {
+  const { messages } = req.body;
+
+  if (!messages || messages.length === 0) {
+    return res.status(400).json({ error: 'No messages provided.' });
+  }
+
+  if (!process.env.GROQ_API_KEY) {
+    return res.status(500).json({ error: 'API key missing.' });
+  }
+
+  try {
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.GROQ_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        max_tokens: 1000,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are Chef AI, an expert culinary assistant for NutriChef. You specialize in cooking techniques, recipes, ingredient substitutions, nutrition, food science, and healthy eating. Be warm, concise and practical. Use **bold** for key terms. Always focus on food and cooking. If asked something unrelated, politely redirect.'
+          },
+          ...messages.slice(-12)
+        ]
+      })
+    });
+
+    const data = await response.json();
+    if (!response.ok) return res.status(500).json({ error: data.error?.message || 'Error' });
+
+    const reply = data.choices?.[0]?.message?.content || 'Sorry, I could not respond.';
+    res.json({ reply });
+
+  } catch (err) {
+    console.error('Chat error:', err.message);
+    res.status(500).json({ error: 'Internal error: ' + err.message });
+  }
+});
+
 app.get('/', (req, res) => res.json({ status: 'NutriChef API en ligne ✅', apiKey: !!process.env.GROQ_API_KEY }));
 app.listen(PORT, () => console.log(`NutriChef backend started on port ${PORT}`));
