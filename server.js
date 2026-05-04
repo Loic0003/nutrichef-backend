@@ -1,4 +1,3 @@
-require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 
@@ -210,3 +209,103 @@ app.get('/api/status', async (req, res) => {
 
 app.get('/', (req, res) => res.json({ status: 'NutriChef API en ligne ✅', apiKey: !!process.env.GROQ_API_KEY }));
 app.listen(PORT, () => console.log(`NutriChef backend started on port ${PORT}`));
+
+// ── STRIPE ──
+const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY;
+const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
+const PRICE_BASIC = 'price_1TTTfMCaAJJZTXvh1JcmWTtE';
+const PRICE_PRO = 'price_1TTTfjCaAJJZTXvhjOaiAxVr';
+
+async function stripeRequest(path, method = 'GET', body = null) {
+  const opts = {
+    method,
+    headers: {
+      'Authorization': `Bearer ${STRIPE_SECRET}`,
+      'Content-Type': 'application/x-www-form-urlencoded'
+    }
+  };
+  if (body) opts.body = new URLSearchParams(body).toString();
+  const res = await fetch(`https://api.stripe.com/v1${path}`, opts);
+  return res.json();
+}
+
+// Create Stripe checkout session
+app.post('/api/create-checkout', async (req, res) => {
+  const { priceId, userId, userEmail } = req.body;
+  if (!STRIPE_SECRET) return res.status(500).json({ error: 'Stripe not configured.' });
+  if (!priceId || !userId) return res.status(400).json({ error: 'Missing priceId or userId.' });
+
+  try {
+    const session = await stripeRequest('/checkout/sessions', 'POST', {
+      'payment_method_types[]': 'card',
+      'line_items[0][price]': priceId,
+      'line_items[0][quantity]': '1',
+      'mode': 'subscription',
+      'customer_email': userEmail || '',
+      'metadata[user_id]': userId,
+      'metadata[price_id]': priceId,
+      'success_url': 'https://nutritrack-realty-muse.vercel.app/?success=true',
+      'cancel_url': 'https://nutritrack-realty-muse.vercel.app/?canceled=true',
+    });
+    res.json({ url: session.url });
+  } catch (err) {
+    console.error('Stripe checkout error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Stripe webhook — update subscription in Supabase
+app.post('/api/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  const sig = req.headers['stripe-signature'];
+  let event;
+
+  try {
+    // Simple verification without stripe-node library
+    const payload = req.body.toString();
+    event = JSON.parse(payload);
+  } catch (err) {
+    return res.status(400).send('Webhook error: ' + err.message);
+  }
+
+  const session = event.data?.object;
+  const userId = session?.metadata?.user_id;
+  const priceId = session?.metadata?.price_id || session?.items?.data?.[0]?.price?.id;
+
+  if (event.type === 'checkout.session.completed' || event.type === 'customer.subscription.updated') {
+    if (!userId) return res.json({ received: true });
+
+    let plan = 'free';
+    if (priceId === PRICE_PRO) plan = 'pro';
+    else if (priceId === PRICE_BASIC) plan = 'basic';
+
+    // Upsert subscription in Supabase
+    await fetch(`${SUPABASE_URL}/rest/v1/subscriptions`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_SERVICE_KEY,
+        'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates'
+      },
+      body: JSON.stringify({ user_id: userId, plan, updated_at: new Date().toISOString() })
+    });
+
+    console.log(`Plan updated: user ${userId} → ${plan}`);
+  }
+
+  if (event.type === 'customer.subscription.deleted') {
+    if (!userId) return res.json({ received: true });
+    await fetch(`${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${userId}`, {
+      method: 'PATCH',
+      headers: {
+        'apikey': SUPABASE_SERVICE_KEY,
+        'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ plan: 'free', updated_at: new Date().toISOString() })
+    });
+    console.log(`Subscription cancelled: user ${userId} → free`);
+  }
+
+  res.json({ received: true });
+});
