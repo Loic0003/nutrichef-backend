@@ -54,7 +54,6 @@ app.post('/api/recipe', async (req, res) => {
   if (!ingredients || ingredients.length === 0) return res.status(400).json({ error: 'No ingredients provided.' });
   if (!process.env.GROQ_API_KEY) return res.status(500).json({ error: 'API key missing.' });
 
-  // Check limits if userId provided
   if (userId) {
     const plan = await getUserPlan(userId);
     const limits = PLANS[plan] || PLANS.free;
@@ -114,7 +113,6 @@ Reply ONLY in valid JSON (no backticks, no markdown):
 
     const recipes = Array.isArray(payload.recipes) ? payload.recipes : [payload];
 
-    // Log usage
     if (userId) await logUsage(userId, 'recipe');
 
     res.json({ recipes: recipes.slice(0, 3) });
@@ -132,7 +130,6 @@ app.post('/api/chat', async (req, res) => {
   if (!messages || messages.length === 0) return res.status(400).json({ error: 'No messages provided.' });
   if (!process.env.GROQ_API_KEY) return res.status(500).json({ error: 'API key missing.' });
 
-  // Check limits
   if (userId) {
     const plan = await getUserPlan(userId);
     const limits = PLANS[plan] || PLANS.free;
@@ -208,6 +205,56 @@ app.get('/api/status', async (req, res) => {
 });
 
 app.get('/', (req, res) => res.json({ status: 'NutriChef API en ligne ✅', apiKey: !!process.env.GROQ_API_KEY }));
+
+// ── ADMIN ──
+const ADMIN_SECRET = process.env.ADMIN_SECRET;
+
+function requireAdmin(req, res, next) {
+  const auth = req.headers['x-admin-secret'];
+  if (!auth || auth !== ADMIN_SECRET) {
+    return res.status(401).json({ error: 'Non autorisé' });
+  }
+  next();
+}
+
+app.get('/api/admin/users', requireAdmin, async (req, res) => {
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/subscriptions?select=*`, {
+    headers: { 'apikey': SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}` }
+  });
+  const data = await response.json();
+  res.json(data);
+});
+
+app.post('/api/admin/set-plan', requireAdmin, async (req, res) => {
+  const { userId, plan } = req.body;
+  if (!userId || !plan) return res.status(400).json({ error: 'userId et plan requis' });
+  await fetch(`${SUPABASE_URL}/rest/v1/subscriptions`, {
+    method: 'POST',
+    headers: {
+      'apikey': SUPABASE_SERVICE_KEY,
+      'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'resolution=merge-duplicates'
+    },
+    body: JSON.stringify({ user_id: userId, plan, updated_at: new Date().toISOString() })
+  });
+  res.json({ success: true, userId, plan });
+});
+
+app.get('/api/admin/stats', requireAdmin, async (req, res) => {
+  const [users, usage] = await Promise.all([
+    fetch(`${SUPABASE_URL}/rest/v1/subscriptions?select=plan`, {
+      headers: { 'apikey': SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}` }
+    }).then(r => r.json()),
+    fetch(`${SUPABASE_URL}/rest/v1/usage?select=type`, {
+      headers: { 'apikey': SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}` }
+    }).then(r => r.json())
+  ]);
+  const planCounts = users.reduce((acc, u) => { acc[u.plan] = (acc[u.plan] || 0) + 1; return acc; }, {});
+  const usageCounts = usage.reduce((acc, u) => { acc[u.type] = (acc[u.type] || 0) + 1; return acc; }, {});
+  res.json({ plans: planCounts, usage: usageCounts, totalUsers: users.length });
+});
+
 app.listen(PORT, () => console.log(`NutriChef backend started on port ${PORT}`));
 
 // ── STRIPE ──
@@ -229,7 +276,6 @@ async function stripeRequest(path, method = 'GET', body = null) {
   return res.json();
 }
 
-// Create Stripe checkout session
 app.post('/api/create-checkout', async (req, res) => {
   const { priceId, userId, userEmail } = req.body;
   if (!STRIPE_SECRET) return res.status(500).json({ error: 'Stripe not configured.' });
@@ -254,13 +300,11 @@ app.post('/api/create-checkout', async (req, res) => {
   }
 });
 
-// Stripe webhook — update subscription in Supabase
 app.post('/api/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
   const sig = req.headers['stripe-signature'];
   let event;
 
   try {
-    // Simple verification without stripe-node library
     const payload = req.body.toString();
     event = JSON.parse(payload);
   } catch (err) {
@@ -278,7 +322,6 @@ app.post('/api/webhook', express.raw({ type: 'application/json' }), async (req, 
     if (priceId === PRICE_PRO) plan = 'pro';
     else if (priceId === PRICE_BASIC) plan = 'basic';
 
-    // Upsert subscription in Supabase
     await fetch(`${SUPABASE_URL}/rest/v1/subscriptions`, {
       method: 'POST',
       headers: {
