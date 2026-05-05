@@ -49,7 +49,7 @@ async function logUsage(userId, type) {
 
 // ── RECIPE ENDPOINT ──
 app.post('/api/recipe', async (req, res) => {
-  const { ingredients, prefs, language, userId } = req.body;
+ const { ingredients, prefs, language, userId, goal } = req.body;
 
   if (!ingredients || ingredients.length === 0) return res.status(400).json({ error: 'No ingredients provided.' });
   if (!process.env.GROQ_API_KEY) return res.status(500).json({ error: 'API key missing.' });
@@ -71,12 +71,22 @@ app.post('/api/recipe', async (req, res) => {
     }
   }
 
-  const prefsText = prefs && prefs.length > 0 ? `Dietary preferences: ${prefs.join(', ')}.` : '';
-  const lang = language || 'English';
+const prefsText = prefs && prefs.length > 0 ? `Dietary preferences: ${prefs.join(', ')}.` : '';
 
-  const prompt = `You are an expert nutritionist and chef. Generate exactly 3 different delicious healthy recipes using mainly these ingredients: ${ingredients.join(', ')}. ${prefsText}
+const goalTexts = {
+  muscle_gain:  'The user wants to BUILD MUSCLE (prise de masse): prioritize high calories (500+ kcal), high protein (30g+), complex carbs, healthy fats.',
+  health:       'The user wants GENERAL HEALTH: balanced macros, lots of vegetables, antioxidants, whole foods.',
+  high_protein: 'The user wants HIGH PROTEIN recipes: minimum 35g protein per serving, lean meats, legumes, eggs, dairy.',
+  low_budget:   'The user wants LOW BUDGET recipes: use cheap everyday ingredients, no expensive items, simple pantry staples.',
+  weight_loss:  'The user wants WEIGHT LOSS: keep calories under 400 kcal, high fiber, low fat, lots of vegetables.',
+  energy:       'The user wants ENERGY & SPORT: complex carbs for sustained energy, electrolytes, pre/post workout friendly.',
+};
+const goalText = goal && goalTexts[goal] ? `GOAL: ${goalTexts[goal]}` : '';
+
+const prompt = `You are an expert nutritionist and chef. Generate exactly 3 different delicious healthy recipes using mainly these ingredients: ${ingredients.join(', ')}. ${prefsText} ${goalText}
 
 IMPORTANT: Respond ENTIRELY in ${lang}. Every single word must be in ${lang}.
+${goalText ? `IMPORTANT: Every recipe MUST strictly follow the goal above. Adapt ingredients, portions and nutrition accordingly.` : ''}
 
 Reply ONLY in valid JSON (no backticks, no markdown):
 {
