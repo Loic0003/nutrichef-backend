@@ -49,7 +49,8 @@ async function logUsage(userId, type) {
 
 // ── RECIPE ENDPOINT ──
 app.post('/api/recipe', async (req, res) => {
- const { ingredients, prefs, language, userId, goal } = req.body;
+const { ingredients, prefs, language, userId, goal } = req.body;
+const lang = language || 'English';
 
   if (!ingredients || ingredients.length === 0) return res.status(400).json({ error: 'No ingredients provided.' });
   if (!process.env.GROQ_API_KEY) return res.status(500).json({ error: 'API key missing.' });
