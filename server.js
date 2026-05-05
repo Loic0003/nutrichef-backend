@@ -225,19 +225,24 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
   res.json(data);
 });
 
+// ── FIX: PATCH au lieu de POST pour mettre à jour le plan ──
 app.post('/api/admin/set-plan', requireAdmin, async (req, res) => {
   const { userId, plan } = req.body;
   if (!userId || !plan) return res.status(400).json({ error: 'userId et plan requis' });
-  await fetch(`${SUPABASE_URL}/rest/v1/subscriptions`, {
-    method: 'POST',
+
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${userId}`, {
+    method: 'PATCH',
     headers: {
       'apikey': SUPABASE_SERVICE_KEY,
       'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
-      'Content-Type': 'application/json',
-      'Prefer': 'resolution=merge-duplicates'
+      'Content-Type': 'application/json'
     },
-    body: JSON.stringify({ user_id: userId, plan, updated_at: new Date().toISOString() })
+    body: JSON.stringify({ plan, updated_at: new Date().toISOString() })
   });
+
+  const text = await response.text();
+  console.log('Supabase set-plan response:', response.status, text);
+
   res.json({ success: true, userId, plan });
 });
 
