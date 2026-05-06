@@ -139,7 +139,22 @@ app.get('/api/web-recipes', async (req, res) => {
   const { query } = req.query;
   if (!query) return res.status(400).json({ error: 'No query' });
   try {
-    const r = await fetch(`https://www.themealdb.com/api/json/v1/1/search.php?s=${encodeURIComponent(query)}`);
+    const translateRes = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 50,
+        messages: [{ role: 'user', content: `Translate this to English, return ONLY the translation, nothing else: "${query}"` }]
+      })
+    });
+    const translateData = await translateRes.json();
+    const englishQuery = translateData.content[0].text.trim();
+    const r = await fetch(`https://www.themealdb.com/api/json/v1/1/search.php?s=${encodeURIComponent(englishQuery)}`);
     const data = await r.json();
     const meals = (data.meals || []).slice(0, 4).map(m => ({
       title: m.strMeal,
@@ -152,37 +167,6 @@ app.get('/api/web-recipes', async (req, res) => {
     res.json({ results: meals });
   } catch {
     res.status(500).json({ error: 'Search failed' });
-  }
-});
-app.post('/api/detect-ingredients', async (req, res) => {
-  const { image, mimeType } = req.body;
-  if (!image) return res.status(400).json({ error: 'No image' });
-  try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-opus-4-5',
-        max_tokens: 256,
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'image', source: { type: 'base64', media_type: mimeType, data: image } },
-            { type: 'text', text: 'List only the food ingredients visible in this image. Return ONLY a JSON array of strings, nothing else. Example: ["chicken","broccoli","garlic"]' }
-          ]
-        }]
-      })
-    });
-    const data = await response.json();
-    const text = data.content[0].text.trim();
-    const ingredients = JSON.parse(text);
-    res.json({ ingredients });
-  } catch (err) {
-    res.status(500).json({ error: 'Detection failed' });
   }
 });
 
