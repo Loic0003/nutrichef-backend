@@ -139,31 +139,18 @@ app.get('/api/web-recipes', async (req, res) => {
   const { query } = req.query;
   if (!query) return res.status(400).json({ error: 'No query' });
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1024,
-        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-        messages: [{
-          role: 'user',
-          content: `Search for 4 popular recipes for "${query}". For each recipe found on a real website, return ONLY a JSON array like this, nothing else:
-[{"title":"...","description":"...","url":"...","image":"...","time":"...","source":"..."}]
-Use real recipe URLs from sites like allrecipes.com, marmiton.org, 750g.com, etc. Image must be a direct image URL.`
-        }]
-      })
-    });
-    const data = await response.json();
-    const text = data.content.filter(b => b.type === 'text').map(b => b.text).join('');
-    const match = text.match(/\[[\s\S]*\]/);
-    const results = match ? JSON.parse(match[0]) : [];
-    res.json({ results });
-  } catch(e) {
+    const r = await fetch(`https://www.themealdb.com/api/json/v1/1/search.php?s=${encodeURIComponent(query)}`);
+    const data = await r.json();
+    const meals = (data.meals || []).slice(0, 4).map(m => ({
+      title: m.strMeal,
+      description: m.strCategory + ' · ' + m.strArea,
+      image: m.strMealThumb,
+      url: m.strSource || `https://www.themealdb.com/meal/${m.idMeal}`,
+      time: null,
+      source: 'TheMealDB'
+    }));
+    res.json({ results: meals });
+  } catch {
     res.status(500).json({ error: 'Search failed' });
   }
 });
@@ -196,65 +183,6 @@ app.post('/api/detect-ingredients', async (req, res) => {
     res.json({ ingredients });
   } catch (err) {
     res.status(500).json({ error: 'Detection failed' });
-  }
-});
-app.post('/api/chat', async (req, res) => {
-  const { messages, userId } = req.body;
-
-  if (!messages || messages.length === 0) return res.status(400).json({ error: 'No messages provided.' });
-  if (!process.env.GROQ_API_KEY) return res.status(500).json({ error: 'API key missing.' });
-
-  if (userId) {
-    const plan = await getUserPlan(userId);
-    const limits = PLANS[plan] || PLANS.free;
-
-    if (limits.chat_per_window === 0) {
-      return res.status(403).json({
-        error: 'plan_required',
-        message: 'Chef AI is available on Basic and Pro plans. Upgrade to chat!'
-      });
-    }
-
-    if (limits.chat_per_window < 9999) {
-      const used = await countUsage(userId, 'chat', limits.chat_window_hours);
-      if (used >= limits.chat_per_window) {
-        return res.status(429).json({
-          error: 'limit_reached',
-          plan,
-          used,
-          limit: limits.chat_per_window,
-          message: `You've used ${used}/${limits.chat_per_window} Chef AI messages in the last ${limits.chat_window_hours}h. Try again later or upgrade to Pro!`
-        });
-      }
-    }
-  }
-
-  try {
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        max_tokens: 1000,
-       messages: [
-  { role: 'system', content: 'You are Chef AI, an expert culinary assistant for NutriChef. You specialize in cooking techniques, recipes, ingredient substitutions, nutrition, food science, and healthy eating. When you give a recipe, ALWAYS include a nutrition section at the end with: Calories, Protein, Carbs, Fat, and Fiber per serving. Be warm, concise and practical. Use **bold** for key terms. Always focus on food and cooking. If asked something unrelated, politely redirect.' },
-  ...messages.slice(-12)
-]
-      })
-    });
-
-    const data = await response.json();
-    if (!response.ok) return res.status(500).json({ error: data.error?.message || 'Error' });
-
-    const reply = data.choices?.[0]?.message?.content || 'Sorry, I could not respond.';
-
-    if (userId) await logUsage(userId, 'chat');
-
-    res.json({ reply });
-
-  } catch (err) {
-    console.error('Chat error:', err.message);
-    res.status(500).json({ error: 'Internal error: ' + err.message });
   }
 });
 
