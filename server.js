@@ -135,6 +135,38 @@ Reply ONLY in valid JSON (no backticks, no markdown):
 });
 
 // ── CHAT ENDPOINT ──
+app.get('/api/web-recipes', async (req, res) => {
+  const { query } = req.query;
+  if (!query) return res.status(400).json({ error: 'No query' });
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1024,
+        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+        messages: [{
+          role: 'user',
+          content: `Search for 4 popular recipes for "${query}". For each recipe found on a real website, return ONLY a JSON array like this, nothing else:
+[{"title":"...","description":"...","url":"...","image":"...","time":"...","source":"..."}]
+Use real recipe URLs from sites like allrecipes.com, marmiton.org, 750g.com, etc. Image must be a direct image URL.`
+        }]
+      })
+    });
+    const data = await response.json();
+    const text = data.content.filter(b => b.type === 'text').map(b => b.text).join('');
+    const match = text.match(/\[[\s\S]*\]/);
+    const results = match ? JSON.parse(match[0]) : [];
+    res.json({ results });
+  } catch(e) {
+    res.status(500).json({ error: 'Search failed' });
+  }
+});
 app.post('/api/detect-ingredients', async (req, res) => {
   const { image, mimeType } = req.body;
   if (!image) return res.status(400).json({ error: 'No image' });
