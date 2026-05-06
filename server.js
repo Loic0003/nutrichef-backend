@@ -156,7 +156,7 @@ app.get('/api/web-recipes', async (req, res) => {
     const englishQuery = translateData.content[0].text.trim();
     const r = await fetch(`https://www.themealdb.com/api/json/v1/1/search.php?s=${encodeURIComponent(englishQuery)}`);
     const data = await r.json();
-    const meals = (data.meals || []).slice(0, 4).map(m => ({
+    const meals = (data.meals || []).slice(0, 6).map(m => ({
       title: m.strMeal,
       description: m.strCategory + ' · ' + m.strArea,
       image: m.strMealThumb,
