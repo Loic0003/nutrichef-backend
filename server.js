@@ -139,20 +139,20 @@ app.get('/api/web-recipes', async (req, res) => {
   const { query } = req.query;
   if (!query) return res.status(400).json({ error: 'No query' });
   try {
-    const translateRes = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 50,
-        messages: [{ role: 'user', content: `Translate this to English, return ONLY the translation, nothing else: "${query}"` }]
-      })
-    });
-    const translateData = await translateRes.json();
+   const translateRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${process.env.GROQ_API_KEY}`
+  },
+  body: JSON.stringify({
+    model: 'llama-3.3-70b-versatile',
+    max_tokens: 50,
+    messages: [{ role: 'user', content: `Translate this to English, return ONLY the translation, nothing else: "${query}"` }]
+  })
+});
+const translateData = await translateRes.json();
+const englishQuery = translateData.choices[0].message.content.trim();
     const englishQuery = translateData.content[0].text.trim();
     const r = await fetch(`https://www.themealdb.com/api/json/v1/1/search.php?s=${encodeURIComponent(englishQuery)}`);
     const data = await r.json();
