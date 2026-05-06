@@ -135,6 +135,7 @@ Reply ONLY in valid JSON (no backticks, no markdown):
 });
 
 // ── CHAT ENDPOINT ──
+app.options('/api/web-recipes', (req, res) => res.sendStatus(200));
 app.get('/api/web-recipes', async (req, res) => {
   const { query } = req.query;
   if (!query) return res.status(400).json({ error: 'No query' });
