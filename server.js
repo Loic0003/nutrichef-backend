@@ -270,7 +270,35 @@ app.get('/api/admin/stats', requireAdmin, async (req, res) => {
   const usageCounts = usage.reduce((acc, u) => { acc[u.type] = (acc[u.type] || 0) + 1; return acc; }, {});
   res.json({ plans: planCounts, usage: usageCounts, totalUsers: users.length });
 });
+app.post('/api/meal-plan', async (req, res) => {
+  const { userId, date, meal_type, recipe_data } = req.body;
+  if (!userId) return res.status(401).json({ error: 'Not logged in' });
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/meal_plans`, {
+    method: 'POST',
+    headers: { 'apikey': SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_id: userId, date, meal_type, recipe_data })
+  });
+  res.json({ success: r.ok });
+});
 
+app.get('/api/meal-plan', async (req, res) => {
+  const { userId, from, to } = req.query;
+  if (!userId) return res.status(401).json({ error: 'Not logged in' });
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/meal_plans?user_id=eq.${userId}&date=gte.${from}&date=lte.${to}&select=*`, {
+    headers: { 'apikey': SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}` }
+  });
+  const data = await r.json();
+  res.json(data);
+});
+
+app.delete('/api/meal-plan/:id', async (req, res) => {
+  const { id } = req.params;
+  await fetch(`${SUPABASE_URL}/rest/v1/meal_plans?id=eq.${id}`, {
+    method: 'DELETE',
+    headers: { 'apikey': SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}` }
+  });
+  res.json({ success: true });
+});
 app.listen(PORT, () => console.log(`NutriChef backend started on port ${PORT}`));
 
 // ── STRIPE ──
