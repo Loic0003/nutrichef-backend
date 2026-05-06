@@ -274,7 +274,7 @@ app.delete('/api/meal-plan/:id', async (req, res) => {
   });
   res.json({ success: true });
 });
-app.listen(PORT, () => console.log(`NutriChef backend started on port ${PORT}`));
+
 
 // ── STRIPE ──
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY;
@@ -370,4 +370,4 @@ app.post('/api/webhook', express.raw({ type: 'application/json' }), async (req, 
   }
 
   res.json({ received: true });
-});
+});app.listen(PORT, () => console.log(`NutriChef backend started on port ${PORT}`));
