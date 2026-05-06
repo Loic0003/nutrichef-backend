@@ -135,6 +135,37 @@ Reply ONLY in valid JSON (no backticks, no markdown):
 });
 
 // ── CHAT ENDPOINT ──
+app.post('/api/detect-ingredients', async (req, res) => {
+  const { image, mimeType } = req.body;
+  if (!image) return res.status(400).json({ error: 'No image' });
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-opus-4-5',
+        max_tokens: 256,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: mimeType, data: image } },
+            { type: 'text', text: 'List only the food ingredients visible in this image. Return ONLY a JSON array of strings, nothing else. Example: ["chicken","broccoli","garlic"]' }
+          ]
+        }]
+      })
+    });
+    const data = await response.json();
+    const text = data.content[0].text.trim();
+    const ingredients = JSON.parse(text);
+    res.json({ ingredients });
+  } catch (err) {
+    res.status(500).json({ error: 'Detection failed' });
+  }
+});
 app.post('/api/chat', async (req, res) => {
   const { messages, userId } = req.body;
 
