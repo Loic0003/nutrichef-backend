@@ -84,13 +84,13 @@ app.post('/api/recipe', async (req, res) => {
   };
   const goalText = goal && goalTexts[goal] ? `GOAL: ${goalTexts[goal]}` : '';
 
-  const prompt = `You are an expert nutritionist and chef. The user wants to eat: "${dishName}".
+  const prompt = `You are an expert nutritionist and chef. The user wants to cook: "${dishName}". This is the DISH NAME only.
 
 Generate exactly 6 different recipe variations of this dish.
 
 CRITICAL RULES:
 - "${dishName}" is the DISH NAME the user wants to eat, NOT an ingredient
-- NEVER write "${dishName}" inside the ingredients list
+-NEVER write "${dishName}" or any part of it inside the ingredients list. The ingredients must be the RAW COMPONENTS needed to make this dish (flour, butter, milk, chicken breast, pasta, etc.)
 - The ingredients list must contain REAL ingredients needed to make the dish (e.g. pasta, chicken, cream, garlic, onion, olive oil, salt, pepper, cheese, herbs, etc.)
 - The steps must explain how to cook the dish from scratch using those real ingredients
 ${prefsText}
