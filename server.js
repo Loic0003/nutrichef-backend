@@ -185,7 +185,7 @@ app.get('/api/web-recipes', async (req, res) => {
           max_tokens: 2000,
           messages: [{
             role: 'user',
-            content: `Generate 3 recipes for "${query}". Reply ONLY in valid JSON, no backticks: {"recipes":[{"title":"...","description":"...","image":null,"url":null,"source":"AI Chef"}]}`
+            content: `Generate 3 recipes for "${query}". Reply ONLY in valid JSON, no backticks: {"recipes":[{"title":"...","description":"...","image":null,"url":null,"source":"AI Chef"},{"title":"...","description":"...","image":null,"url":null,"source":"AI Chef"},{"title":"...","description":"...","image":null,"url":null,"source":"AI Chef"},{"title":"...","description":"...","image":null,"url":null,"source":"AI Chef"},{"title":"...","description":"...","image":null,"url":null,"source":"AI Chef"},{"title":"...","description":"...","image":null,"url":null,"source":"AI Chef"}]}
           }]
         })
       });
