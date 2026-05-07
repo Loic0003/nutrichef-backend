@@ -84,7 +84,7 @@ app.post('/api/recipe', async (req, res) => {
   };
   const goalText = goal && goalTexts[goal] ? `GOAL: ${goalTexts[goal]}` : '';
 
-  const prompt = `You are an expert nutritionist and chef. Generate exactly 6 different delicious healthy recipes using mainly these ingredients: ${ingredients.join(', ')}. ${prefsText} ${goalText}
+  const prompt = `You are an expert nutritionist and chef. Generate exactly 6 different delicious healthy recipes for this dish or craving: ${ingredients.join(', ')}. ${prefsText} ${goalText}
 
 IMPORTANT: Respond ENTIRELY in ${lang}. Every single word must be in ${lang}.
 ${goalText ? `IMPORTANT: Every recipe MUST strictly follow the goal above. Adapt ingredients, portions and nutrition accordingly.` : ''}
