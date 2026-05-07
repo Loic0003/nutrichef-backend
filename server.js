@@ -49,7 +49,8 @@ async function logUsage(userId, type) {
 
 // ── RECIPE ENDPOINT ──
 app.post('/api/recipe', async (req, res) => {
-  const { ingredients, prefs, language, userId, goal } = req.body;
+  const { ingredients, dish, prefs, language, userId, goal } = req.body;
+const dishName = dish || ingredients.join(', ');
   const lang = language || 'English';
 
   if (!ingredients || ingredients.length === 0) return res.status(400).json({ error: 'No ingredients provided.' });
@@ -86,7 +87,9 @@ app.post('/api/recipe', async (req, res) => {
 
 const prompt = `You are an expert nutritionist and chef.
 
-The user wants to eat: "${ingredients.join(', ')}".
+The user wants to cook: "${dishName}".
+The following are the ONLY real ingredients allowed in the recipe: flour, eggs, butter, cream, chicken, pasta, garlic, onion, olive oil, salt, pepper, cheese, herbs — adapt based on the dish name.
+ABSOLUTE RULE: Never list "${dishName}" as an ingredient. It is the dish to make, not an ingredient.
 
 Generate exactly 6 different recipe variations of this dish.
 
