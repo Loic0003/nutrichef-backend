@@ -148,7 +148,7 @@ app.get('/api/web-recipes', async (req, res) => {
         max_tokens: 3000,
         messages: [{
           role: 'user',
-          content: `Generate exactly 3 variations of "${query}". Reply ONLY in valid JSON, no backticks:
+          content: `Generate exactly 6 variations of "${query}". Reply ONLY in valid JSON, no backticks:
 {
   "recipes": [
     {
