@@ -1,3 +1,5 @@
+require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
 
@@ -7,6 +9,7 @@ const PORT = process.env.PORT || 3000;
 app.use(cors({ origin: '*', methods: ['GET', 'POST', 'OPTIONS', 'PATCH', 'DELETE'], allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-secret'] }));
 app.options('*', cors());
 app.use(express.json());
+
 
 const PLANS = {
   free:  { recipes_per_day: 3,   chat_per_window: 0,   chat_window_hours: 0 },
@@ -47,123 +50,189 @@ async function logUsage(userId, type) {
 }
 
 // ── DETECT IF INPUT IS A DISH NAME OR A LIST OF INGREDIENTS ──
+function detectInputLanguage(text) {
+  const raw = String(text || '').trim();
+  const normalized = raw
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+  const patterns = {
+    French: [
+      'bonjour', 'salut', 'avec', 'sans', 'pour', 'des', 'les', 'une', 'plat',
+      'pates', 'cremeuse', 'cremeuses', 'poulet', 'legumes', 'fromage', 'patate',
+      'pommes de terre', 'riz', 'oeuf', 'oeufs', 'recette', 'sauce'
+    ],
+    Spanish: [
+      'hola', 'con', 'sin', 'para', 'quiero', 'plato', 'pasta', 'pollo',
+      'verduras', 'queso', 'patata', 'receta', 'arroz', 'huevo', 'salsa'
+    ],
+    German: [
+      'hallo', 'mit', 'ohne', 'fur', 'gericht', 'nudeln', 'hahnchen', 'gemuse',
+      'kase', 'kartoffel', 'rezept', 'reis', 'ei', 'sauce'
+    ],
+    English: [
+      'hello', 'with', 'without', 'for', 'dish', 'pasta', 'chicken', 'vegetables',
+      'cheese', 'potato', 'recipe', 'rice', 'egg', 'sauce', 'creamy'
+    ]
+  };
+
+  let bestLanguage = 'English';
+  let bestScore = 0;
+
+  for (const [language, words] of Object.entries(patterns)) {
+    let score = 0;
+    for (const word of words) {
+      if (normalized.includes(word)) score += 1;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestLanguage = language;
+    }
+  }
+
+  return bestLanguage;
+}
+
 function buildRecipePrompt(ingredients, prefs, language, goal) {
-  const lang = language || 'English';
-  const prefsText = prefs && prefs.length > 0 ? `Dietary preferences: ${prefs.join(', ')}.` : '';
+  const safeIngredients = Array.isArray(ingredients)
+    ? ingredients.map(i => String(i || '').trim()).filter(Boolean)
+    : [];
+
+  const originalInput = safeIngredients.join(', ');
+  const detectedLanguage = detectInputLanguage(originalInput);
+  const prefsText = prefs && prefs.length > 0
+    ? `Dietary preferences: ${prefs.join(', ')}.`
+    : '';
 
   const goalTexts = {
-    muscle_gain:  'The user wants to BUILD MUSCLE: prioritize high calories (500+ kcal), high protein (30g+), complex carbs, healthy fats.',
-    health:       'The user wants GENERAL HEALTH: balanced macros, lots of vegetables, antioxidants, whole foods.',
+    muscle_gain: 'The user wants to BUILD MUSCLE: prioritize high calories (500+ kcal), high protein (30g+), complex carbs, healthy fats.',
+    health: 'The user wants GENERAL HEALTH: balanced macros, lots of vegetables, antioxidants, whole foods.',
     high_protein: 'The user wants HIGH PROTEIN recipes: minimum 35g protein per serving, lean meats, legumes, eggs, dairy.',
-    low_budget:   'The user wants LOW BUDGET recipes: use cheap everyday ingredients, no expensive items, simple pantry staples.',
-    weight_loss:  'The user wants WEIGHT LOSS: keep calories under 400 kcal, high fiber, low fat, lots of vegetables.',
-    energy:       'The user wants ENERGY & SPORT: complex carbs for sustained energy, electrolytes, pre/post workout friendly.',
-    'Weight loss':  'The user wants WEIGHT LOSS: keep calories under 400 kcal, high fiber, low fat, lots of vegetables.',
-    'Muscle gain':  'The user wants to BUILD MUSCLE: prioritize high calories (500+ kcal), high protein (30g+), complex carbs, healthy fats.',
+    low_budget: 'The user wants LOW BUDGET recipes: use cheap everyday ingredients, no expensive items, simple pantry staples.',
+    weight_loss: 'The user wants WEIGHT LOSS: keep calories under 400 kcal, high fiber, low fat, lots of vegetables.',
+    energy: 'The user wants ENERGY & SPORT: complex carbs for sustained energy, electrolytes, pre/post workout friendly.',
+    'Weight loss': 'The user wants WEIGHT LOSS: keep calories under 400 kcal, high fiber, low fat, lots of vegetables.',
+    'Muscle gain': 'The user wants to BUILD MUSCLE: prioritize high calories (500+ kcal), high protein (30g+), complex carbs, healthy fats.',
     'High protein': 'The user wants HIGH PROTEIN recipes: minimum 35g protein per serving, lean meats, legumes, eggs, dairy.',
-    'Low budget':   'The user wants LOW BUDGET recipes: use cheap everyday ingredients, no expensive items, simple pantry staples.',
+    'Low budget': 'The user wants LOW BUDGET recipes: use cheap everyday ingredients, no expensive items, simple pantry staples.',
     'General health': 'The user wants GENERAL HEALTH: balanced macros, lots of vegetables, antioxidants, whole foods.',
-    'Vegetarian':   'The user wants VEGETARIAN recipes: no meat, no fish. Use plant-based proteins like legumes, tofu, tempeh, eggs, dairy.',
+    'Vegetarian': 'The user wants VEGETARIAN recipes: no meat, no fish. Use plant-based proteins like legumes, tofu, tempeh, eggs, dairy.',
     'Perte de poids': 'The user wants WEIGHT LOSS: keep calories under 400 kcal, high fiber, low fat, lots of vegetables.',
     'Prise de masse': 'The user wants to BUILD MUSCLE: prioritize high calories (500+ kcal), high protein (30g+), complex carbs, healthy fats.',
     'Hyper protéiné': 'The user wants HIGH PROTEIN recipes: minimum 35g protein per serving, lean meats, legumes, eggs, dairy.',
-    'Low budget':     'The user wants LOW BUDGET recipes: use cheap everyday ingredients, no expensive items, simple pantry staples.',
     'Santé générale': 'The user wants GENERAL HEALTH: balanced macros, lots of vegetables, antioxidants, whole foods.',
-    'Végétarien':     'The user wants VEGETARIAN recipes: no meat, no fish.',
+    'Végétarien': 'The user wants VEGETARIAN recipes: no meat, no fish.',
     'Pérdida de peso': 'The user wants WEIGHT LOSS: keep calories under 400 kcal, high fiber, low fat, lots of vegetables.',
-    'Ganar músculo':   'The user wants to BUILD MUSCLE: prioritize high calories (500+ kcal), high protein (30g+), complex carbs, healthy fats.',
-    'Alto en proteína':'The user wants HIGH PROTEIN recipes: minimum 35g protein per serving.',
-    'Bajo presupuesto':'The user wants LOW BUDGET recipes: use cheap everyday ingredients.',
-    'Salud general':   'The user wants GENERAL HEALTH: balanced macros, lots of vegetables, antioxidants, whole foods.',
-    'Vegetariano':     'The user wants VEGETARIAN recipes: no meat, no fish.',
+    'Ganar músculo': 'The user wants to BUILD MUSCLE: prioritize high calories (500+ kcal), high protein (30g+), complex carbs, healthy fats.',
+    'Alto en proteína': 'The user wants HIGH PROTEIN recipes: minimum 35g protein per serving.',
+    'Bajo presupuesto': 'The user wants LOW BUDGET recipes: use cheap everyday ingredients.',
+    'Salud general': 'The user wants GENERAL HEALTH: balanced macros, lots of vegetables, antioxidants, whole foods.',
+    'Vegetariano': 'The user wants VEGETARIAN recipes: no meat, no fish.'
   };
+
   const goalText = goal && goalTexts[goal] ? `GOAL: ${goalTexts[goal]}` : '';
 
-  // Detect if this looks like a dish name (multi-word phrase) or a list of raw ingredients
-  const isDishName = ingredients.length === 1 || (
-    ingredients.length <= 3 &&
-    ingredients.join(' ').split(' ').length >= 2 &&
-    !ingredients.every(i => i.split(' ').length === 1)
-  );
-
-  let prompt;
+  const isDishName =
+    safeIngredients.length === 1 ||
+    (
+      safeIngredients.length <= 3 &&
+      safeIngredients.join(' ').split(/\s+/).length >= 2 &&
+      !safeIngredients.every(i => i.trim().split(/\s+/).length === 1)
+    );
 
   if (isDishName) {
-    // User typed a dish name like "pâtes crémeuses au poulet"
-    const dishName = ingredients.join(', ');
-    prompt = `You are an expert nutritionist and chef. The user wants recipes for the dish: "${dishName}".
+    const dishName = safeIngredients.join(', ');
+
+    return `You are an expert nutritionist and chef. The user wants recipes for this dish: "${dishName}".
 
 Generate exactly 6 different recipe variations of "${dishName}".
 
-CRITICAL RULES ABOUT INGREDIENTS:
-- "${dishName}" is the NAME OF THE DISH, NOT an ingredient.
-- NEVER write "${dishName}" or any shortened version of it (like "pâte cremeuse", "creamy pasta", etc.) inside the ingredients list.
-- The ingredients list must contain ONLY the raw grocery items needed to cook this dish from scratch.
-- For example, if the dish is "creamy chicken pasta", the ingredients should be: pasta (tagliatelle, penne, etc.), chicken breast, heavy cream, garlic, onion, olive oil, parmesan, salt, pepper, herbs — NOT "creamy chicken pasta".
-- Think: what would a home cook buy at the grocery store to make this dish?
+CRITICAL RULES:
+- "${dishName}" is the name of the dish, not an ingredient.
+- Never place "${dishName}" or a shortened version of it inside the ingredients list.
+- The ingredients list must contain only real grocery ingredients needed to cook the dish from scratch.
+- Think like a grocery list for a real home cook.
 ${prefsText}
 ${goalText}
-${goalText ? `IMPORTANT: Every recipe MUST strictly follow the goal above.` : ''}
+${goalText ? 'IMPORTANT: Every recipe must strictly follow the goal above.' : ''}
 
-IMPORTANT: You MUST detect the language of the user's input ("${ingredients.join(', ')}") and respond ENTIRELY in that detected language. If the input contains French words, respond in French. If Spanish, respond in Spanish. If English, respond in English. Every single word of your response including recipe names, descriptions, ingredients, steps and tips must be in the detected language.
-Reply ONLY in valid JSON (no backticks, no markdown):
+LANGUAGE RULES:
+- Detect the user's language from this exact input: "${originalInput}".
+- The detected language is most likely: ${detectedLanguage}.
+- Respond entirely in that same detected language.
+- Never switch to English unless the user wrote in English.
+- This must also work for French, Spanish, German, English, and any other language if clearly detected.
+
+Reply ONLY in valid JSON:
 {
   "recipes": [
     {
-      "name": "Specific recipe name (e.g. Pâtes crémeuses au poulet grillé et parmesan)",
-      "description": "Short appetizing description in ${lang}",
+      "name": "Recipe name",
+      "description": "Short appetizing description",
       "time": "30 min",
       "servings": "2 servings",
       "difficulty": "Easy",
       "calories": "350 kcal",
-      "nutrition": { "proteines": "28g", "glucides": "32g", "lipides": "12g", "fibres": "6g" },
-      "ingredients": ["100g pasta", "150g chicken breast", "100ml heavy cream", "2 garlic cloves", "30g parmesan", "1 tbsp olive oil", "salt", "pepper"],
-      "steps": ["Step 1 in ${lang}", "Step 2 in ${lang}", "Step 3 in ${lang}"],
-      "tip": "Health tip in ${lang}"
-    }
-  ]
-}`;
-
-  } else {
-    // User typed raw ingredients like "légumes, pâtes, poivron"
-    const ingList = ingredients.join(', ');
-    prompt = `You are an expert nutritionist and chef. The user has these ingredients available: ${ingList}.
-
-Generate exactly 6 different recipes that use these ingredients: ${ingList}.
-
-CRITICAL RULES ABOUT INGREDIENTS:
-- The ingredients listed above are RAW INGREDIENTS available to the user.
-- You MUST use all or most of them in each recipe.
-- You can add common pantry staples (oil, salt, pepper, garlic, onion, butter, herbs, spices) to complement them.
-- The ingredients list in the recipe must contain real grocery items with quantities.
-- Never write a combined dish name as if it were an ingredient.
-${prefsText}
-${goalText}
-${goalText ? `IMPORTANT: Every recipe MUST strictly follow the goal above.` : ''}
-
-IMPORTANT: Respond ENTIRELY in ${lang}. Every single word must be in ${lang}.
-
-Reply ONLY in valid JSON (no backticks, no markdown):
-{
-  "recipes": [
-    {
-      "name": "Creative recipe name in ${lang}",
-      "description": "Short appetizing description in ${lang}",
-      "time": "30 min",
-      "servings": "2 servings",
-      "difficulty": "Easy",
-      "calories": "350 kcal",
-      "nutrition": { "proteines": "28g", "glucides": "32g", "lipides": "12g", "fibres": "6g" },
-      "ingredients": ["200g pasta", "1 red bell pepper", "2 tbsp olive oil", "2 garlic cloves", "salt", "pepper"],
-      "steps": ["Step 1 in ${lang}", "Step 2 in ${lang}", "Step 3 in ${lang}"],
-      "tip": "Health tip in ${lang}"
+      "nutrition": {
+        "proteines": "28g",
+        "glucides": "32g",
+        "lipides": "12g",
+        "fibres": "6g"
+      },
+      "ingredients": ["ingredient 1", "ingredient 2"],
+      "steps": ["step 1", "step 2", "step 3"],
+      "tip": "Health tip"
     }
   ]
 }`;
   }
 
-  return prompt;
+  return `You are an expert nutritionist and chef. The user has these ingredients available: ${originalInput}.
+
+Generate exactly 6 different recipes that use all or most of these ingredients: ${originalInput}.
+
+CRITICAL RULES:
+- These are raw ingredients available to the user.
+- Use all or most of them in each recipe whenever possible.
+- You may add common pantry staples like oil, salt, pepper, garlic, onion, butter, herbs, and spices.
+- The ingredients list must contain real grocery items with quantities.
+- Never write the full dish name as if it were a single grocery ingredient.
+${prefsText}
+${goalText}
+${goalText ? 'IMPORTANT: Every recipe must strictly follow the goal above.' : ''}
+
+LANGUAGE RULES:
+- Detect the user's language from this exact input: "${originalInput}".
+- The detected language is most likely: ${detectedLanguage}.
+- Respond entirely in that same detected language.
+- Never switch to English unless the user wrote in English.
+- This must also work for French, Spanish, German, English, and any other language if clearly detected.
+
+Reply ONLY in valid JSON:
+{
+  "recipes": [
+    {
+      "name": "Recipe name",
+      "description": "Short appetizing description",
+      "time": "30 min",
+      "servings": "2 servings",
+      "difficulty": "Easy",
+      "calories": "350 kcal",
+      "nutrition": {
+        "proteines": "28g",
+        "glucides": "32g",
+        "lipides": "12g",
+        "fibres": "6g"
+      },
+      "ingredients": ["ingredient 1", "ingredient 2"],
+      "steps": ["step 1", "step 2", "step 3"],
+      "tip": "Health tip"
+    }
+  ]
+}`;
 }
+
 
 // ── RECIPE ENDPOINT ──
 app.post('/api/recipe', async (req, res) => {
@@ -223,16 +292,28 @@ app.get('/api/web-recipes', async (req, res) => {
   const { query } = req.query;
   if (!query) return res.status(400).json({ error: 'No query' });
 
+  const detectedLanguage = detectInputLanguage(String(query));
+
   try {
     const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.GROQ_API_KEY}`
+      },
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile',
         max_tokens: 3000,
         messages: [{
           role: 'user',
-          content: `Generate exactly 6 variations of "${query}". Reply ONLY in valid JSON, no backticks:
+          content: `Generate exactly 6 variations of "${query}".
+
+LANGUAGE RULES:
+- Detect the user's language from this exact input: "${query}".
+- The detected language is most likely: ${detectedLanguage}.
+- Reply entirely in that same language.
+
+Reply ONLY in valid JSON:
 {
   "recipes": [
     {
@@ -259,6 +340,7 @@ app.get('/api/web-recipes', async (req, res) => {
     res.status(500).json({ error: 'Search failed' });
   }
 });
+
 
 // ── CHAT ENDPOINT ──
 app.post('/api/chat', async (req, res) => {
