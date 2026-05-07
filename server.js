@@ -105,8 +105,7 @@ ${prefsText}
 ${goalText}
 ${goalText ? `IMPORTANT: Every recipe MUST strictly follow the goal above.` : ''}
 
-IMPORTANT: Detect the language of the user's input and respond ENTIRELY in that same language. If the input is in French, respond in French. If in Spanish, respond in Spanish. If in English, respond in English.
-
+IMPORTANT: You MUST detect the language of the user's input ("${ingredients.join(', ')}") and respond ENTIRELY in that detected language. If the input contains French words, respond in French. If Spanish, respond in Spanish. If English, respond in English. Every single word of your response including recipe names, descriptions, ingredients, steps and tips must be in the detected language.
 Reply ONLY in valid JSON (no backticks, no markdown):
 {
   "recipes": [
@@ -291,7 +290,7 @@ app.post('/api/chat', async (req, res) => {
         model: 'llama-3.3-70b-versatile',
         max_tokens: 1000,
         messages: [
-          { role: 'system', content: You are Chef AI, an expert culinary assistant. You help with recipes, cooking techniques, ingredient substitutions, and nutrition advice. Be friendly, concise, and practical. IMPORTANT: Always detect the language the user is writing in and respond in that exact same language. },
+          { role: 'system', content: You are Chef AI, an expert culinary assistant. You help with recipes, cooking techniques, ingredient substitutions, and nutrition advice. Be friendly, concise, and practical. IMPORTANT: Always detect the language the user is writing in and respond ENTIRELY in that exact same language. Never mix languages. If the user writes in French, your entire response must be in French. If Spanish, entirely in Spanish. If English, entirely in English.},
           ...messages
         ]
       })
