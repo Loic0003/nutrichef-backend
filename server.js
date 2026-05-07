@@ -84,7 +84,40 @@ app.post('/api/recipe', async (req, res) => {
   };
   const goalText = goal && goalTexts[goal] ? `GOAL: ${goalTexts[goal]}` : '';
 
-  const prompt = `You are an expert nutritionist and chef. The user is craving: "${ingredients.join(', ')}". Generate exactly 6 different delicious healthy recipe VARIATIONS of this dish. CRITICAL: Treat the input as the DESIRED DISH NAME, not as raw ingredients. NEVER write "cook the ${ingredients.join(', ')}" in the steps. The ingredients list must contain the ACTUAL ingredients needed to make the dish from scratch. ${prefsText} ${goalText}
+const prompt = `You are an expert nutritionist and chef.
+
+The user wants to eat: "${ingredients.join(', ')}".
+
+Generate exactly 6 different recipe variations of this dish.
+
+CRITICAL RULES:
+- The input is a DISH NAME, not an ingredient
+- NEVER use the dish name as an ingredient (e.g. never write "250g de pâtes crémeuses")
+- The ingredients list must contain REAL ingredients like: pasta, chicken, cream, garlic, olive oil, etc.
+- Steps must explain how to MAKE the dish from scratch with those real ingredients
+
+${prefsText} ${goalText}
+
+IMPORTANT: Respond ENTIRELY in ${lang}. Every single word must be in ${lang}.
+${goalText ? `IMPORTANT: Every recipe MUST strictly follow the goal above.` : ''}
+
+Reply ONLY in valid JSON (no backticks, no markdown):
+{
+  "recipes": [
+    {
+      "name": "Recipe name in ${lang}",
+      "description": "Short appetizing description in ${lang}",
+      "time": "30 min",
+      "servings": "2 servings",
+      "difficulty": "Easy",
+      "calories": "350 kcal",
+      "nutrition": { "proteines": "28g", "glucides": "32g", "lipides": "12g", "fibres": "6g" },
+      "ingredients": ["ingredient with quantity in ${lang}"],
+      "steps": ["Step 1 in ${lang}", "Step 2 in ${lang}", "Step 3 in ${lang}"],
+      "tip": "Health tip in ${lang}"
+    }
+  ]
+}`; Generate exactly 6 different delicious healthy recipe VARIATIONS of this dish. CRITICAL: Treat the input as the DESIRED DISH NAME, not as raw ingredients. NEVER write "cook the ${ingredients.join(', ')}" in the steps. The ingredients list must contain the ACTUAL ingredients needed to make the dish from scratch. ${prefsText} ${goalText}
 
 IMPORTANT: Respond ENTIRELY in ${lang}. Every single word must be in ${lang}.
 ${goalText ? `IMPORTANT: Every recipe MUST strictly follow the goal above. Adapt ingredients, portions and nutrition accordingly.` : ''}
