@@ -372,23 +372,21 @@ app.post('/api/chat', async (req, res) => {
         model: 'llama-3.3-70b-versatile',
         max_tokens: 1000,
         messages: [
-{ role: 'system', content: `You are Chef AI, an expert culinary assistant. Help with recipes, cooking techniques, substitutions, and nutrition. Be friendly and practical. CRITICAL: Look at the user's message language and respond ENTIRELY in that exact language. French message = French response. Spanish message = Spanish response. English message = English response. NEVER start with "Hello" or "I'm ready" — just answer the question directly.` },
+          { role: 'system', content: `You are Chef AI, an expert culinary assistant. Help with recipes, cooking techniques, substitutions, and nutrition. Be friendly and practical. CRITICAL: Look at the user's message language and respond ENTIRELY in that exact language. French message = French response. Spanish message = Spanish response. English message = English response. NEVER start with "Hello" or "I'm ready" — just answer the question directly.` },
           ...messages,
         ]
-
+      })
+    });
     const data = await response.json();
     if (!response.ok) return res.status(500).json({ error: 'Groq error' });
-
     const reply = data.choices?.[0]?.message?.content?.trim() || 'Sorry, something went wrong.';
     if (userId) await logUsage(userId, 'chat');
     res.json({ reply });
-
   } catch (err) {
     console.error('Chat error:', err.message);
     res.status(500).json({ error: 'Internal error' });
   }
 });
-
 // ── DETECT INGREDIENTS FROM PHOTO ──
 app.post('/api/detect-ingredients', async (req, res) => {
   const { image, mimeType } = req.body;
