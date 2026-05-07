@@ -8,7 +8,6 @@ app.use(cors({ origin: '*', methods: ['GET', 'POST', 'OPTIONS', 'PATCH', 'DELETE
 app.options('*', cors());
 app.use(express.json());
 
-// Plan limits
 const PLANS = {
   free:  { recipes_per_day: 3,   chat_per_window: 0,   chat_window_hours: 0 },
   basic: { recipes_per_day: 30,  chat_per_window: 6,   chat_window_hours: 2.5 },
@@ -49,9 +48,9 @@ async function logUsage(userId, type) {
 
 // ── RECIPE ENDPOINT ──
 app.post('/api/recipe', async (req, res) => {
-  const { ingredients, dish, prefs, language, userId, goal } = req.body;
-const dishName = dish || ingredients.join(', ');
+  const { ingredients, prefs, language, userId, goal } = req.body;
   const lang = language || 'English';
+  const dishName = ingredients.join(', ');
 
   if (!ingredients || ingredients.length === 0) return res.status(400).json({ error: 'No ingredients provided.' });
   if (!process.env.GROQ_API_KEY) return res.status(500).json({ error: 'API key missing.' });
@@ -85,45 +84,20 @@ const dishName = dish || ingredients.join(', ');
   };
   const goalText = goal && goalTexts[goal] ? `GOAL: ${goalTexts[goal]}` : '';
 
-const prompt = `You are an expert nutritionist and chef.
-
-The user wants to cook: "${dishName}".
-The following are the ONLY real ingredients allowed in the recipe: flour, eggs, butter, cream, chicken, pasta, garlic, onion, olive oil, salt, pepper, cheese, herbs — adapt based on the dish name.
-ABSOLUTE RULE: Never list "${dishName}" as an ingredient. It is the dish to make, not an ingredient.
+  const prompt = `You are an expert nutritionist and chef. The user wants to eat: "${dishName}".
 
 Generate exactly 6 different recipe variations of this dish.
 
 CRITICAL RULES:
-- The input is a DISH NAME, not an ingredient
-- NEVER use the dish name as an ingredient (e.g. never write "250g de pâtes crémeuses")
-- The ingredients list must contain REAL ingredients like: pasta, chicken, cream, garlic, olive oil, etc.
-- Steps must explain how to MAKE the dish from scratch with those real ingredients
-
-${prefsText} ${goalText}
-
-IMPORTANT: Respond ENTIRELY in ${lang}. Every single word must be in ${lang}.
-${goalText ? `IMPORTANT: Every recipe MUST strictly follow the goal above.` : ''}
-
-Reply ONLY in valid JSON (no backticks, no markdown):
-{
-  "recipes": [
-    {
-      "name": "Recipe name in ${lang}",
-      "description": "Short appetizing description in ${lang}",
-      "time": "30 min",
-      "servings": "2 servings",
-      "difficulty": "Easy",
-      "calories": "350 kcal",
-      "nutrition": { "proteines": "28g", "glucides": "32g", "lipides": "12g", "fibres": "6g" },
-      "ingredients": ["ingredient with quantity in ${lang}"],
-      "steps": ["Step 1 in ${lang}", "Step 2 in ${lang}", "Step 3 in ${lang}"],
-      "tip": "Health tip in ${lang}"
-    }
-  ]
-}`; Generate exactly 6 different delicious healthy recipe VARIATIONS of this dish. CRITICAL: Treat the input as the DESIRED DISH NAME, not as raw ingredients. NEVER write "cook the ${ingredients.join(', ')}" in the steps. The ingredients list must contain the ACTUAL ingredients needed to make the dish from scratch. ${prefsText} ${goalText}
-
-IMPORTANT: Respond ENTIRELY in ${lang}. Every single word must be in ${lang}.
+- "${dishName}" is the DISH NAME the user wants to eat, NOT an ingredient
+- NEVER write "${dishName}" inside the ingredients list
+- The ingredients list must contain REAL ingredients needed to make the dish (e.g. pasta, chicken, cream, garlic, onion, olive oil, salt, pepper, cheese, herbs, etc.)
+- The steps must explain how to cook the dish from scratch using those real ingredients
+${prefsText}
+${goalText}
 ${goalText ? `IMPORTANT: Every recipe MUST strictly follow the goal above. Adapt ingredients, portions and nutrition accordingly.` : ''}
+
+IMPORTANT: Respond ENTIRELY in ${lang}. Every single word must be in ${lang}.
 
 Reply ONLY in valid JSON (no backticks, no markdown):
 {
@@ -170,7 +144,7 @@ Reply ONLY in valid JSON (no backticks, no markdown):
   }
 });
 
-// ── WEB RECIPES ENDPOINT (CORRIGÉ) ──
+// ── WEB RECIPES ENDPOINT ──
 app.get('/api/web-recipes', async (req, res) => {
   const { query } = req.query;
   if (!query) return res.status(400).json({ error: 'No query' });
@@ -205,34 +179,6 @@ app.get('/api/web-recipes', async (req, res) => {
     const clean = text.replace(/```json|```/g, '').trim();
     const parsed = JSON.parse(clean);
     return res.json({ results: parsed.recipes || [] });
-
-  } catch (err) {
-    console.error('Web recipes error:', err.message);
-    res.status(500).json({ error: 'Search failed' });
-  }
-});
-    // Étape 3 : si TheMealDB trouve rien → Groq génère des recettes
-    if (!meals.length) {
-      const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` },
-        body: JSON.stringify({
-          model: 'llama-3.3-70b-versatile',
-          max_tokens: 2000,
-          messages: [{
-            role: 'user',
-            content: `Generate 3 recipes for "${query}". Reply ONLY in valid JSON, no backticks: {"recipes":[{"title":"...","description":"...","image":null,"url":null,"source":"AI Chef"},{"title":"...","description":"...","image":null,"url":null,"source":"AI Chef"},{"title":"...","description":"...","image":null,"url":null,"source":"AI Chef"},{"title":"...","description":"...","image":null,"url":null,"source":"AI Chef"},{"title":"...","description":"...","image":null,"url":null,"source":"AI Chef"},{"title":"...","description":"...","image":null,"url":null,"source":"AI Chef"}]}
-          }]
-        })
-      });
-      const gd = await groqRes.json();
-      const text = gd.choices?.[0]?.message?.content?.trim() || '';
-      const clean = text.replace(/```json|```/g, '').trim();
-      const parsed = JSON.parse(clean);
-      return res.json({ results: parsed.recipes || [] });
-    }
-
-    res.json({ results: meals });
 
   } catch (err) {
     console.error('Web recipes error:', err.message);
