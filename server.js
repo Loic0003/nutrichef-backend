@@ -84,7 +84,7 @@ app.post('/api/recipe', async (req, res) => {
   };
   const goalText = goal && goalTexts[goal] ? `GOAL: ${goalTexts[goal]}` : '';
 
-  const prompt = `You are an expert nutritionist and chef. Generate exactly 3 different delicious healthy recipes using mainly these ingredients: ${ingredients.join(', ')}. ${prefsText} ${goalText}
+  const prompt = `You are an expert nutritionist and chef. Generate exactly 6 different delicious healthy recipes using mainly these ingredients: ${ingredients.join(', ')}. ${prefsText} ${goalText}
 
 IMPORTANT: Respond ENTIRELY in ${lang}. Every single word must be in ${lang}.
 ${goalText ? `IMPORTANT: Every recipe MUST strictly follow the goal above. Adapt ingredients, portions and nutrition accordingly.` : ''}
@@ -126,7 +126,7 @@ Reply ONLY in valid JSON (no backticks, no markdown):
 
     if (userId) await logUsage(userId, 'recipe');
 
-    res.json({ recipes: recipes.slice(0, 3) });
+    res.json({ recipes: recipes.slice(0, 6) });
 
   } catch (err) {
     console.error('Recipe error:', err.message);
