@@ -4,7 +4,7 @@ const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(cors({ origin: '*', methods: ['GET', 'POST', 'OPTIONS'], allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-secret'] }));
+app.use(cors({ origin: '*', methods: ['GET', 'POST', 'OPTIONS', 'PATCH', 'DELETE'], allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-secret'] }));
 app.options('*', cors());
 app.use(express.json());
 
@@ -49,8 +49,8 @@ async function logUsage(userId, type) {
 
 // ── RECIPE ENDPOINT ──
 app.post('/api/recipe', async (req, res) => {
-const { ingredients, prefs, language, userId, goal } = req.body;
-const lang = language || 'English';
+  const { ingredients, prefs, language, userId, goal } = req.body;
+  const lang = language || 'English';
 
   if (!ingredients || ingredients.length === 0) return res.status(400).json({ error: 'No ingredients provided.' });
   if (!process.env.GROQ_API_KEY) return res.status(500).json({ error: 'API key missing.' });
@@ -72,19 +72,19 @@ const lang = language || 'English';
     }
   }
 
-const prefsText = prefs && prefs.length > 0 ? `Dietary preferences: ${prefs.join(', ')}.` : '';
+  const prefsText = prefs && prefs.length > 0 ? `Dietary preferences: ${prefs.join(', ')}.` : '';
 
-const goalTexts = {
-  muscle_gain:  'The user wants to BUILD MUSCLE (prise de masse): prioritize high calories (500+ kcal), high protein (30g+), complex carbs, healthy fats.',
-  health:       'The user wants GENERAL HEALTH: balanced macros, lots of vegetables, antioxidants, whole foods.',
-  high_protein: 'The user wants HIGH PROTEIN recipes: minimum 35g protein per serving, lean meats, legumes, eggs, dairy.',
-  low_budget:   'The user wants LOW BUDGET recipes: use cheap everyday ingredients, no expensive items, simple pantry staples.',
-  weight_loss:  'The user wants WEIGHT LOSS: keep calories under 400 kcal, high fiber, low fat, lots of vegetables.',
-  energy:       'The user wants ENERGY & SPORT: complex carbs for sustained energy, electrolytes, pre/post workout friendly.',
-};
-const goalText = goal && goalTexts[goal] ? `GOAL: ${goalTexts[goal]}` : '';
+  const goalTexts = {
+    muscle_gain:  'The user wants to BUILD MUSCLE: prioritize high calories (500+ kcal), high protein (30g+), complex carbs, healthy fats.',
+    health:       'The user wants GENERAL HEALTH: balanced macros, lots of vegetables, antioxidants, whole foods.',
+    high_protein: 'The user wants HIGH PROTEIN recipes: minimum 35g protein per serving, lean meats, legumes, eggs, dairy.',
+    low_budget:   'The user wants LOW BUDGET recipes: use cheap everyday ingredients, no expensive items, simple pantry staples.',
+    weight_loss:  'The user wants WEIGHT LOSS: keep calories under 400 kcal, high fiber, low fat, lots of vegetables.',
+    energy:       'The user wants ENERGY & SPORT: complex carbs for sustained energy, electrolytes, pre/post workout friendly.',
+  };
+  const goalText = goal && goalTexts[goal] ? `GOAL: ${goalTexts[goal]}` : '';
 
-const prompt = `You are an expert nutritionist and chef. Generate exactly 3 different delicious healthy recipes using mainly these ingredients: ${ingredients.join(', ')}. ${prefsText} ${goalText}
+  const prompt = `You are an expert nutritionist and chef. Generate exactly 3 different delicious healthy recipes using mainly these ingredients: ${ingredients.join(', ')}. ${prefsText} ${goalText}
 
 IMPORTANT: Respond ENTIRELY in ${lang}. Every single word must be in ${lang}.
 ${goalText ? `IMPORTANT: Every recipe MUST strictly follow the goal above. Adapt ingredients, portions and nutrition accordingly.` : ''}
@@ -134,39 +134,146 @@ Reply ONLY in valid JSON (no backticks, no markdown):
   }
 });
 
-// ── CHAT ENDPOINT ──
+// ── WEB RECIPES ENDPOINT (CORRIGÉ) ──
 app.options('/api/web-recipes', (req, res) => res.sendStatus(200));
 app.get('/api/web-recipes', async (req, res) => {
   const { query } = req.query;
   if (!query) return res.status(400).json({ error: 'No query' });
+
   try {
-   const translateRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${process.env.GROQ_API_KEY}`
-  },
-  body: JSON.stringify({
-    model: 'llama-3.3-70b-versatile',
-    max_tokens: 50,
-    messages: [{ role: 'user', content: `Translate this to English, return ONLY the translation, nothing else: "${query}"` }]
-  })
-});
-const translateData = await translateRes.json();
-const englishQuery = translateData.choices[0].message.content.trim();
+    // Étape 1 : traduire en anglais avec Groq
+    const translateRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        max_tokens: 30,
+        messages: [{ role: 'user', content: `Translate to English, return ONLY the translation, nothing else: "${query}"` }]
+      })
+    });
+    const translateData = await translateRes.json();
+    const englishQuery = translateData.choices?.[0]?.message?.content?.trim() || query;
+
+    // Étape 2 : chercher sur TheMealDB
     const r = await fetch(`https://www.themealdb.com/api/json/v1/1/search.php?s=${encodeURIComponent(englishQuery)}`);
     const data = await r.json();
-    const meals = (data.meals || []).slice(0, 6).map(m => ({
+    const meals = (data.meals || []).slice(0, 3).map(m => ({
       title: m.strMeal,
       description: m.strCategory + ' · ' + m.strArea,
       image: m.strMealThumb,
       url: m.strSource || `https://www.themealdb.com/meal/${m.idMeal}`,
-      time: null,
       source: 'TheMealDB'
     }));
+
+    // Étape 3 : si TheMealDB trouve rien → Groq génère des recettes
+    if (!meals.length) {
+      const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` },
+        body: JSON.stringify({
+          model: 'llama-3.3-70b-versatile',
+          max_tokens: 2000,
+          messages: [{
+            role: 'user',
+            content: `Generate 3 recipes for "${query}". Reply ONLY in valid JSON, no backticks: {"recipes":[{"title":"...","description":"...","image":null,"url":null,"source":"AI Chef"}]}`
+          }]
+        })
+      });
+      const gd = await groqRes.json();
+      const text = gd.choices?.[0]?.message?.content?.trim() || '';
+      const clean = text.replace(/```json|```/g, '').trim();
+      const parsed = JSON.parse(clean);
+      return res.json({ results: parsed.recipes || [] });
+    }
+
     res.json({ results: meals });
-  } catch {
+
+  } catch (err) {
+    console.error('Web recipes error:', err.message);
     res.status(500).json({ error: 'Search failed' });
+  }
+});
+
+// ── CHAT ENDPOINT ──
+app.post('/api/chat', async (req, res) => {
+  const { messages, userId } = req.body;
+  if (!messages || !messages.length) return res.status(400).json({ error: 'No messages' });
+  if (!process.env.GROQ_API_KEY) return res.status(500).json({ error: 'API key missing.' });
+
+  if (userId) {
+    const plan = await getUserPlan(userId);
+    const limits = PLANS[plan] || PLANS.free;
+    if (limits.chat_per_window === 0) {
+      return res.status(403).json({ error: 'Chef AI not available on free plan.' });
+    }
+    if (limits.chat_per_window < 9999) {
+      const used = await countUsage(userId, 'chat', limits.chat_window_hours);
+      if (used >= limits.chat_per_window) {
+        return res.status(429).json({ message: `You've used all ${limits.chat_per_window} Chef AI messages for this window.` });
+      }
+    }
+  } else {
+    return res.status(403).json({ error: 'Please sign in to use Chef AI.' });
+  }
+
+  try {
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        max_tokens: 1000,
+        messages: [
+          { role: 'system', content: 'You are Chef AI, an expert culinary assistant. You help with recipes, cooking techniques, ingredient substitutions, and nutrition advice. Be friendly, concise, and practical.' },
+          ...messages
+        ]
+      })
+    });
+
+    const data = await response.json();
+    if (!response.ok) return res.status(500).json({ error: 'Groq error' });
+
+    const reply = data.choices?.[0]?.message?.content?.trim() || 'Sorry, something went wrong.';
+    if (userId) await logUsage(userId, 'chat');
+    res.json({ reply });
+
+  } catch (err) {
+    console.error('Chat error:', err.message);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+// ── DETECT INGREDIENTS FROM PHOTO ──
+app.post('/api/detect-ingredients', async (req, res) => {
+  const { image, mimeType } = req.body;
+  if (!image) return res.status(400).json({ error: 'No image provided' });
+
+  try {
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` },
+      body: JSON.stringify({
+        model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+        max_tokens: 200,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image_url', image_url: { url: `data:${mimeType};base64,${image}` } },
+            { type: 'text', text: 'List all the food ingredients you see in this image. Reply ONLY with a JSON array of ingredient names in lowercase English, like: ["chicken", "broccoli", "garlic"]. Nothing else.' }
+          ]
+        }]
+      })
+    });
+
+    const data = await response.json();
+    const text = data.choices?.[0]?.message?.content?.trim() || '[]';
+    const clean = text.replace(/```json|```/g, '').trim();
+    const ingredients = JSON.parse(clean);
+    res.json({ ingredients });
+
+  } catch (err) {
+    console.error('Detect ingredients error:', err.message);
+    res.status(500).json({ error: 'Could not detect ingredients' });
   }
 });
 
@@ -197,9 +304,7 @@ const ADMIN_SECRET = process.env.ADMIN_SECRET;
 
 function requireAdmin(req, res, next) {
   const auth = req.headers['x-admin-secret'];
-  if (!auth || auth !== ADMIN_SECRET) {
-    return res.status(401).json({ error: 'Non autorisé' });
-  }
+  if (!auth || auth !== ADMIN_SECRET) return res.status(401).json({ error: 'Non autorisé' });
   next();
 }
 
@@ -211,7 +316,6 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
   res.json(data);
 });
 
-// ── FIX: PATCH au lieu de POST pour mettre à jour le plan ──
 app.post('/api/admin/set-plan', requireAdmin, async (req, res) => {
   const { userId, plan } = req.body;
   if (!userId || !plan) return res.status(400).json({ error: 'userId et plan requis' });
@@ -228,7 +332,6 @@ app.post('/api/admin/set-plan', requireAdmin, async (req, res) => {
 
   const text = await response.text();
   console.log('Supabase set-plan response:', response.status, text);
-
   res.json({ success: true, userId, plan });
 });
 
@@ -245,6 +348,8 @@ app.get('/api/admin/stats', requireAdmin, async (req, res) => {
   const usageCounts = usage.reduce((acc, u) => { acc[u.type] = (acc[u.type] || 0) + 1; return acc; }, {});
   res.json({ plans: planCounts, usage: usageCounts, totalUsers: users.length });
 });
+
+// ── MEAL PLAN ──
 app.post('/api/meal-plan', async (req, res) => {
   const { userId, date, meal_type, recipe_data } = req.body;
   if (!userId) return res.status(401).json({ error: 'Not logged in' });
@@ -257,9 +362,17 @@ app.post('/api/meal-plan', async (req, res) => {
 });
 
 app.get('/api/meal-plan', async (req, res) => {
-  const { userId, from, to } = req.query;
+  const { userId, date, from, to } = req.query;
   if (!userId) return res.status(401).json({ error: 'Not logged in' });
-  const r = await fetch(`${SUPABASE_URL}/rest/v1/meal_plans?user_id=eq.${userId}&date=gte.${from}&date=lte.${to}&select=*`, {
+
+  let url;
+  if (date) {
+    url = `${SUPABASE_URL}/rest/v1/meal_plans?user_id=eq.${userId}&date=eq.${date}&select=*`;
+  } else {
+    url = `${SUPABASE_URL}/rest/v1/meal_plans?user_id=eq.${userId}&date=gte.${from}&date=lte.${to}&select=*`;
+  }
+
+  const r = await fetch(url, {
     headers: { 'apikey': SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}` }
   });
   const data = await r.json();
@@ -275,20 +388,15 @@ app.delete('/api/meal-plan/:id', async (req, res) => {
   res.json({ success: true });
 });
 
-
 // ── STRIPE ──
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY;
-const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
 const PRICE_BASIC = 'price_1TTTfMCaAJJZTXvh1JcmWTtE';
 const PRICE_PRO = 'price_1TTTfjCaAJJZTXvhjOaiAxVr';
 
 async function stripeRequest(path, method = 'GET', body = null) {
   const opts = {
     method,
-    headers: {
-      'Authorization': `Bearer ${STRIPE_SECRET}`,
-      'Content-Type': 'application/x-www-form-urlencoded'
-    }
+    headers: { 'Authorization': `Bearer ${STRIPE_SECRET}`, 'Content-Type': 'application/x-www-form-urlencoded' }
   };
   if (body) opts.body = new URLSearchParams(body).toString();
   const res = await fetch(`https://api.stripe.com/v1${path}`, opts);
@@ -320,9 +428,7 @@ app.post('/api/create-checkout', async (req, res) => {
 });
 
 app.post('/api/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
-  const sig = req.headers['stripe-signature'];
   let event;
-
   try {
     const payload = req.body.toString();
     event = JSON.parse(payload);
@@ -336,22 +442,14 @@ app.post('/api/webhook', express.raw({ type: 'application/json' }), async (req, 
 
   if (event.type === 'checkout.session.completed' || event.type === 'customer.subscription.updated') {
     if (!userId) return res.json({ received: true });
-
     let plan = 'free';
     if (priceId === PRICE_PRO) plan = 'pro';
     else if (priceId === PRICE_BASIC) plan = 'basic';
-
     await fetch(`${SUPABASE_URL}/rest/v1/subscriptions`, {
       method: 'POST',
-      headers: {
-        'apikey': SUPABASE_SERVICE_KEY,
-        'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
-        'Content-Type': 'application/json',
-        'Prefer': 'resolution=merge-duplicates'
-      },
+      headers: { 'apikey': SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates' },
       body: JSON.stringify({ user_id: userId, plan, updated_at: new Date().toISOString() })
     });
-
     console.log(`Plan updated: user ${userId} → ${plan}`);
   }
 
@@ -359,15 +457,13 @@ app.post('/api/webhook', express.raw({ type: 'application/json' }), async (req, 
     if (!userId) return res.json({ received: true });
     await fetch(`${SUPABASE_URL}/rest/v1/subscriptions?user_id=eq.${userId}`, {
       method: 'PATCH',
-      headers: {
-        'apikey': SUPABASE_SERVICE_KEY,
-        'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
-        'Content-Type': 'application/json'
-      },
+      headers: { 'apikey': SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ plan: 'free', updated_at: new Date().toISOString() })
     });
     console.log(`Subscription cancelled: user ${userId} → free`);
   }
 
   res.json({ received: true });
-});app.listen(PORT, () => console.log(`NutriChef backend started on port ${PORT}`));
+});
+
+app.listen(PORT, () => console.log(`NutriChef backend started on port ${PORT}`));
