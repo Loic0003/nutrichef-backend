@@ -6,7 +6,7 @@ const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(cors({ origin: '*', methods: ['GET', 'POST', 'OPTIONS', 'PATCH', 'DELETE'], allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-secret'] }));
+app.use(cors({ origin: ['https://nutritrack-realty-muse.vercel.app', 'http://localhost:3000'], methods: ['GET', 'POST', 'OPTIONS', 'PATCH', 'DELETE'], allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-secret'] }));
 app.options('*', cors());
 app.use(express.json());
 
