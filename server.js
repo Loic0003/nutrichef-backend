@@ -105,7 +105,7 @@ ${prefsText}
 ${goalText}
 ${goalText ? `IMPORTANT: Every recipe MUST strictly follow the goal above.` : ''}
 
-IMPORTANT: Respond ENTIRELY in ${lang}. Every single word must be in ${lang}.
+IMPORTANT: Detect the language of the user's input and respond ENTIRELY in that same language. If the input is in French, respond in French. If in Spanish, respond in Spanish. If in English, respond in English.
 
 Reply ONLY in valid JSON (no backticks, no markdown):
 {
@@ -291,7 +291,7 @@ app.post('/api/chat', async (req, res) => {
         model: 'llama-3.3-70b-versatile',
         max_tokens: 1000,
         messages: [
-          { role: 'system', content: 'You are Chef AI, an expert culinary assistant. You help with recipes, cooking techniques, ingredient substitutions, and nutrition advice. Be friendly, concise, and practical.' },
+          { role: 'system', content: You are Chef AI, an expert culinary assistant. You help with recipes, cooking techniques, ingredient substitutions, and nutrition advice. Be friendly, concise, and practical. IMPORTANT: Always detect the language the user is writing in and respond in that exact same language. },
           ...messages
         ]
       })
