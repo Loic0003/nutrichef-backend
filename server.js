@@ -135,36 +135,46 @@ Reply ONLY in valid JSON (no backticks, no markdown):
 });
 
 // ── WEB RECIPES ENDPOINT (CORRIGÉ) ──
-app.options('/api/web-recipes', (req, res) => res.sendStatus(200));
 app.get('/api/web-recipes', async (req, res) => {
   const { query } = req.query;
   if (!query) return res.status(400).json({ error: 'No query' });
 
   try {
-    // Étape 1 : traduire en anglais avec Groq
-    const translateRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` },
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile',
-        max_tokens: 30,
-        messages: [{ role: 'user', content: `Translate to English, return ONLY the translation, nothing else: "${query}"` }]
+        max_tokens: 3000,
+        messages: [{
+          role: 'user',
+          content: `Generate exactly 3 variations of "${query}". Reply ONLY in valid JSON, no backticks:
+{
+  "recipes": [
+    {
+      "title": "Exact name of the dish",
+      "description": "Short appetizing description, 1-2 sentences",
+      "image": null,
+      "url": null,
+      "source": "AI Chef"
+    }
+  ]
+}`
+        }]
       })
     });
-    const translateData = await translateRes.json();
-    const englishQuery = translateData.choices?.[0]?.message?.content?.trim() || query;
 
-    // Étape 2 : chercher sur TheMealDB
-    const r = await fetch(`https://www.themealdb.com/api/json/v1/1/search.php?s=${encodeURIComponent(englishQuery)}`);
-    const data = await r.json();
-    const meals = (data.meals || []).slice(0, 3).map(m => ({
-      title: m.strMeal,
-      description: m.strCategory + ' · ' + m.strArea,
-      image: m.strMealThumb,
-      url: m.strSource || `https://www.themealdb.com/meal/${m.idMeal}`,
-      source: 'TheMealDB'
-    }));
+    const gd = await groqRes.json();
+    const text = gd.choices?.[0]?.message?.content?.trim() || '';
+    const clean = text.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(clean);
+    return res.json({ results: parsed.recipes || [] });
 
+  } catch (err) {
+    console.error('Web recipes error:', err.message);
+    res.status(500).json({ error: 'Search failed' });
+  }
+});
     // Étape 3 : si TheMealDB trouve rien → Groq génère des recettes
     if (!meals.length) {
       const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
